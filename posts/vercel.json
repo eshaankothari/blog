@@ -1,4 +1,5 @@
 {
+  "trailingSlash": false,
   "redirects": [
     { "source": "/", "destination": "/blog", "permanent": false },
     { "source": "/index.html", "destination": "/blog", "permanent": false },
