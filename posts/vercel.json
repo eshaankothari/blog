@@ -1,10 +1,13 @@
 {
+  "trailingSlash": true,
   "redirects": [
     { "source": "/", "destination": "/blog/", "permanent": false },
     { "source": "/blog", "destination": "/blog/", "permanent": false },
     { "source": "/data_center_deals/:path*", "destination": "/blog/data_center_deals/:path*", "permanent": false }
   ],
   "rewrites": [
+    { "source": "/blog/", "destination": "/index.html" },
+    { "source": "/blog/:slug/", "destination": "/:slug/index.html" },
     { "source": "/blog/:path*", "destination": "/:path*" }
   ],
   "headers": [
