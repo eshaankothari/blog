@@ -1,0 +1,20 @@
+{
+  "redirects": [
+    { "source": "/", "destination": "/blog/", "permanent": false },
+    { "source": "/blog", "destination": "/blog/", "permanent": false },
+    { "source": "/data_center_deals/:path*", "destination": "/blog/data_center_deals/:path*", "permanent": false }
+  ],
+  "rewrites": [
+    { "source": "/blog/:path*", "destination": "/:path*" }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "X-Frame-Options", "value": "DENY" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" }
+      ]
+    }
+  ]
+}

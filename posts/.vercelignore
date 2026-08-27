@@ -1,0 +1,5 @@
+*.md
+data/
+.preview/
+.Rhistory
+.DS_Store
