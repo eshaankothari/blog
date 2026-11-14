@@ -1,0 +1,602 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Economic Dispatch</title>
+<!-- KaTeX: Computer Modern fonts + LaTeX math rendering -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<style>
+  :root {
+    --ink: #111111;
+    --grey: #a3a3a3;
+    --amber: #e8a200;      /* energy: dots, waves, fills */
+    --amber-ink: #9a6400;  /* amber for text, readable on white */
+    --amber-soft: #fbecc4;
+    --bg: #ffffff;
+    --main: "KaTeX_Main", "Latin Modern Roman", "CMU Serif", Georgia, serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 18px/1.5 var(--main); }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 48px 24px 72px; }
+  .katex { font-size: 1.05em; }
+
+  /* \maketitle */
+  .title { text-align: center; margin-bottom: 28px; }
+  .title h1 { font-weight: 400; font-size: 30px; margin: 0 0 10px; }
+  .title p { margin: 0; }
+  nav.chapters { text-align: center; font-size: 15px; margin: -16px 0 22px; color: var(--grey); }
+  nav.chapters a { color: inherit; text-decoration: none; margin: 0 6px; }
+  nav.chapters a:hover { text-decoration: underline; }
+  nav.chapters a[aria-current="page"] { color: var(--ink); }
+  .abstract { max-width: 640px; margin: 0 auto 8px; font-size: 16px; text-align: justify; hyphens: auto; }
+  .abstract h2 { text-align: center; font-size: 16px; font-weight: 700; margin: 0 0 4px; }
+  .eq { position: relative; text-align: center; margin: 14px 0 6px; min-height: 2em; }
+  .eq .no { position: absolute; right: 0; top: 50%; transform: translateY(-50%); }
+  .eq.muted { color: var(--grey); font-style: italic; }
+
+  h2.sec { font-size: 21px; font-weight: 700; margin: 36px 0 12px; }
+  h2.sec span { display: inline-block; width: 1.6em; }
+
+  .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; margin: 0 0 8px; }
+  .controls input[type=range] { width: 220px; accent-color: var(--ink); }
+  .controls output { min-width: 72px; }
+  button {
+    font: inherit; font-size: 16px; cursor: pointer; padding: 3px 14px;
+    border: 1px solid var(--ink); border-radius: 0; background: var(--bg); color: var(--ink);
+  }
+  button:hover { background: var(--ink); color: var(--bg); }
+  :focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+
+  .grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 44px; align-items: start; margin-top: 18px; }
+  @media (max-width: 880px) { .grid { grid-template-columns: 1fr; } .eq .no { position: static; transform: none; margin-left: 1em; } }
+  figure { margin: 0; }
+  figure + figure { margin-top: 28px; }
+  figcaption { font-size: 16px; margin-top: 8px; text-align: center; }
+  figure.table figcaption { margin: 0 0 8px; }
+  svg { display: block; width: 100%; height: auto; overflow: visible; }
+  svg text { font-family: var(--main); fill: var(--ink); }
+
+  /* Figure 1 */
+  .ln { fill: none; stroke: var(--ink); transition: stroke .35s; }
+  .flow { fill: none; stroke: var(--amber); stroke-linecap: round; stroke-dasharray: 0 14; opacity: 0;
+          transition: opacity .35s; animation: flow .65s linear infinite; }
+  .flow.live { opacity: 1; }
+  @keyframes flow { to { stroke-dashoffset: -14; } }
+  .wave { fill: none; stroke: var(--ink); stroke-width: 3; stroke-linecap: round; transition: stroke .35s; }
+  .gen.live .wave { stroke: var(--amber); animation: wave 1.1s linear infinite; }
+  @keyframes wave { to { transform: translateX(-44px); } }
+  .gen { transition: opacity .35s; }
+  .gen.idle { opacity: .3; }
+  .ring { fill: none; stroke: var(--amber); stroke-width: 1.6; stroke-dasharray: 4 5; opacity: 0;
+          transform-box: fill-box; transform-origin: center; animation: spin 9s linear infinite; transition: opacity .35s; }
+  .ring.on { opacity: 1; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .win { stroke: #d9d9d9; stroke-width: 2; transition: stroke .35s; }
+  .win.lit { stroke: var(--amber); }
+  .amber { fill: var(--amber-ink) !important; }
+
+  /* Figure 2 */
+  .axis { stroke: var(--ink); stroke-width: 1.2; fill: none; }
+  .step { stroke: var(--ink); stroke-width: 1.5; fill: none; }
+  .guide { stroke: var(--ink); stroke-width: 1; stroke-dasharray: 3 4; }
+  .tick { font-size: 13px; }
+
+  /* Table 1 (booktabs) */
+  table { border-collapse: collapse; width: 100%; font-size: 17px; }
+  th, td { padding: 5px 10px; text-align: right; font-weight: 400; }
+  th:first-child, td:first-child { text-align: left; }
+  thead tr { border-top: 1.5px solid var(--ink); border-bottom: 1px solid var(--ink); }
+  tbody tr:last-child { border-bottom: 1.5px solid var(--ink); }
+  td.p { color: var(--amber-ink); }
+  tr.idle td { color: var(--grey); }
+  .bar { display: inline-block; width: 80px; height: 8px; background: #efefef; vertical-align: middle; }
+  .bar i { display: block; height: 100%; background: var(--amber); transition: width .4s; }
+  input.num { font: inherit; width: 76px; text-align: right; border: 0; border-bottom: 1px solid var(--grey);
+              background: transparent; padding: 1px 2px; -moz-appearance: textfield; }
+  input.num::-webkit-inner-spin-button, input.num::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+  input.num:focus { outline: none; border-bottom-color: var(--ink); }
+  input.num.bad { border-bottom-color: #b3261e; }
+  input.num:disabled { border-bottom-style: dotted; }
+  button.x { border: 0; padding: 0 6px; color: var(--grey); font-size: 20px; line-height: 1; background: none; }
+  button.x:hover { color: var(--ink); background: none; }
+  button.x:disabled { visibility: hidden; }
+  tfoot td { padding-top: 12px; }
+  tfoot td.act { text-align: left; white-space: nowrap; }
+  tfoot button + button { margin-left: 8px; }
+  .unit { margin-left: -10px; }
+  .err { color: #b3261e; font-size: 15px; min-height: 1.5em; margin-top: 6px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .flow, .ring, .gen.live .wave { animation: none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="chapters"><a href="/blog/energy-markets">Contents</a>·<a href="/blog/energy-markets/chapter-1.html" aria-current="page">Chapter 1</a>·<a href="/blog/energy-markets/chapter-2.html">Chapter 2</a></nav>
+  <div class="title">
+    <h1><strong>Electricity Dispatch on a Single Bus</strong></br> Simple Merit-Order Dispatch</h1>
+    <p>Economics 256</p>
+    <p id="today"></p>
+  </div>
+
+  <div class="abstract">
+    <h2>Abstract</h2>
+    Each generator <span data-tex="i"></span> bids a quantity <span data-tex="q_i"></span> at price
+    <span data-tex="p_i"></span>. The system operator meets demand <span data-tex="d"></span> at least cost by solving (1).
+    The cheapest bids clear first, giving each generator a cleared quantity <span data-tex="g_i^\star"></span>,
+    and the last bid needed sets the clearing price <span data-tex="\pi^\star"></span>.
+  </div>
+  <div class="eq"><span data-tex-display="\min_{g}\ \sum_i p_i\,g_i \quad \text{s.t.} \quad \sum_i g_i = d \;\;(\pi^\star), \qquad 0 \le g_i \le q_i"></span><span class="no">(1)</span></div>
+
+  <h2 class="sec"><span>1</span>Interactive model</h2>
+  <div class="controls">
+    <label for="demand">Demand <span data-tex="d"></span></label>
+    <input id="demand" type="range" min="0" step="5">
+    <output id="demandVal" for="demand"></output>
+    <button id="go" type="button">Dispatch</button>
+    <label for="cap">Price cap <span data-tex="\bar{\pi}"></span></label>
+    <input id="cap" class="num" type="number" min="0" step="any" value="500" aria-label="Price cap, $/MWh"><span class="unit">$/MWh</span>
+  </div>
+  <div class="eq" id="solution"></div>
+
+  <div class="grid">
+    <figure>
+      <svg id="diagram" viewBox="0 0 700 470" role="img" aria-label="One-line diagram of generators and demand on a single bus"></svg>
+      <figcaption>Figure 1: Single-bus system. Dots show power flowing from dispatched units to load.</figcaption>
+    </figure>
+    <div>
+      <figure>
+        <svg id="curve" viewBox="0 0 440 300" role="img" aria-label="Merit-order supply curve"></svg>
+        <figcaption>Figure 2: Merit-order supply curve. Shaded: total cost <span data-tex="\sum_i p_i g_i^\star"></span>.
+          Hatched: producer surplus.</figcaption>
+      </figure>
+      <figure class="table">
+        <figcaption>Table 1: Bids and dispatch. Edit a bid, or submit a new generator in the last row.</figcaption>
+        <table>
+          <thead><tr><th>Unit</th><th><span data-tex="q_i"></span> (MW)</th><th><span data-tex="p_i"></span> ($/MWh)</th>
+            <th><span data-tex="g_i^\star"></span> (MW)</th><th><span data-tex="g_i^\star/q_i"></span></th><th></th></tr></thead>
+          <tbody id="rows"></tbody>
+          <tfoot><tr>
+            <td id="newLabel"></td>
+            <td><input class="num" id="newQ" type="number" step="any" min="0" placeholder="MW" aria-label="Quantity bid of the new generator, MW"></td>
+            <td><input class="num" id="newP" type="number" step="any" placeholder="$/MWh" aria-label="Price bid of the new generator, $/MWh"></td>
+            <td class="act" colspan="3"><button id="add" type="button">Submit bid</button><button id="example" type="button">Reset example</button></td>
+          </tr></tfoot>
+        </table>
+        <div class="err" id="err" role="alert"></div>
+      </figure>
+    </div>
+  </div>
+</div>
+
+<script>
+// ---------------------------------------------------------------------------
+// System. Edit freely; units are indexed in the order listed.
+// ---------------------------------------------------------------------------
+const EXAMPLE = [
+  { name: "G1", capacity: 100, marginal_cost: 100 },
+  { name: "G2", capacity: 50,  marginal_cost: 150 },
+  { name: "G3", capacity: 200, marginal_cost: 500 },
+];
+const DEFAULT_DEMAND = 120;
+const MAX_GENS = 6;                      // keeps the one-line diagram readable
+let GENERATORS = EXAMPLE.map(g => ({ ...g }));
+
+// ---------------------------------------------------------------------------
+// JS port of simulation.py -> clear_simple_market (keep in sync with Python).
+// Returns { dispatched: [[name, qty, mc], ...], price }
+// ---------------------------------------------------------------------------
+const PRICE_CAP = 500;                   // default cap, same as simulation.py
+const EPS = 1e-9;
+
+function clearSimpleMarket(generators, demand, priceCap = PRICE_CAP) {
+  if (typeof demand !== "number" || !Number.isFinite(demand) || demand < 0)
+    throw new Error(`demand must be a finite number >= 0, got ${demand}`);
+  if (demand <= EPS) return { dispatched: [], price: 0 };
+
+  const sorted = [...(generators || [])].sort((a, b) => a.marginal_cost - b.marginal_cost);
+  const dispatched = [];
+  let price = priceCap;                  // default = shortage; overwritten once demand is met
+  for (const g of sorted) {
+    if (g.capacity <= 0) continue;
+    if (g.capacity < demand - EPS) {
+      dispatched.push([g.name, g.capacity, g.marginal_cost]);
+      demand -= g.capacity;
+    } else {
+      dispatched.push([g.name, Math.min(demand, g.capacity), g.marginal_cost]);
+      price = g.marginal_cost;
+      break;
+    }
+  }
+  return { dispatched, price };
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+const NS = "http://www.w3.org/2000/svg";
+function el(tag, attrs = {}, parent) {
+  const n = document.createElementNS(NS, tag);
+  for (const k in attrs) n.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(n);
+  return n;
+}
+// LaTeX via KaTeX, with a plain-text fallback if the CDN is unreachable.
+function tex(node, src, display = false) {
+  try { katex.render(src, node, { displayMode: display, throwOnError: false }); }
+  catch { node.textContent = src; }
+}
+// Math-style SVG label in Computer Modern. tokens: [text, style]; style may contain "i" (math italic), "sub" or "sup".
+function math(parent, x, y, tokens, size, attrs = {}) {
+  const t = el("text", { x, y, "font-size": size, ...attrs }, parent);
+  let off = 0;                                   // current baseline shift
+  for (const [s, st = ""] of tokens) {
+    const sp = el("tspan", {}, t);
+    if (st.includes("i")) { sp.setAttribute("font-family", "KaTeX_Math, serif"); sp.setAttribute("font-style", "italic"); }
+    const target = st.includes("sub") ? size * 0.25 : st.includes("sup") ? -size * 0.38 : 0;
+    if (target) sp.setAttribute("font-size", size * 0.7);
+    if (target !== off) sp.setAttribute("dy", target - off);
+    // a subscript right after a superscript sits under it (x_i^* style)
+    if (st.includes("sub") && off < 0) sp.setAttribute("dx", -size * 0.42);
+    off = target;
+    sp.textContent = s;
+  }
+  return t;
+}
+const fmt = v => (Math.round(v * 10) / 10).toLocaleString();
+const idx = g => g.name.replace(/^\D+/, "") || g.name;
+
+// ---------------------------------------------------------------------------
+// State
+// ---------------------------------------------------------------------------
+// Derived from GENERATORS; refreshed by recompute() whenever the bids change.
+let TOTAL, MAX_CAP, D_MAX, n, span, xs, merit;
+function recompute() {
+  GENERATORS.forEach((g, i) => { g.name = `G${i + 1}`; });
+  TOTAL = GENERATORS.reduce((s, g) => s + Math.max(0, g.capacity), 0);
+  MAX_CAP = Math.max(1, ...GENERATORS.map(g => g.capacity));
+  D_MAX = Math.max(10, Math.ceil(TOTAL * 1.25 / 10) * 10);
+  n = GENERATORS.length;
+  span = n > 1 ? Math.min(220, 540 / (n - 1)) : 0;
+  xs = GENERATORS.map((_, i) => 350 + (i - (n - 1) / 2) * span);
+  merit = [...GENERATORS].filter(g => g.capacity > 0).sort((a, b) => a.marginal_cost - b.marginal_cost);
+}
+const state = { live: false, demand: DEFAULT_DEMAND, cap: PRICE_CAP };
+
+function solve() {
+  if (!state.live) return null;
+  const r = clearSimpleMarket(GENERATORS, state.demand, state.cap);
+  const p = Object.fromEntries(r.dispatched.map(([n, q]) => [n, q]));
+  const served = r.dispatched.reduce((s, [, q]) => s + q, 0);
+  const shortage = state.demand - served > EPS;
+  const marginal = !shortage && r.dispatched.length ? r.dispatched.at(-1)[0] : null;
+  return { ...r, p, served, shortage, marginal };
+}
+
+// ---------------------------------------------------------------------------
+// Figure 1: one-line diagram
+// ---------------------------------------------------------------------------
+const dia = document.getElementById("diagram");
+const CY = 150, R = 32, BUS_Y = 262, D_END = 322, CITY_Y = 334;
+const DX = 350;
+const flowWidth = mw => 4 + 4 * Math.min(1, mw / MAX_CAP);
+const nodes = {};
+
+// a wire = ink stroke + amber dots on top (shown only when power flows)
+function wire(d, width, parent = dia) {
+  el("path", { d, class: "ln", "stroke-width": width }, parent);
+  const dots = el("path", { d, class: "flow" }, parent);
+  return {
+    set(mw) {
+      const on = mw > EPS;
+      dots.classList.toggle("live", on);
+      dots.style.strokeWidth = on ? flowWidth(mw) : 0;
+    }
+  };
+}
+
+function wavePath(cx) {
+  const P = 44, A = 9;
+  let d = "";
+  for (let x = -2 * P; x <= 2 * P; x += 1)
+    d += (d ? "L" : "M") + (cx + x) + " " + (CY + A * Math.sin(2 * Math.PI * x / P)).toFixed(2);
+  return d;
+}
+
+const WINDOWS = ["M25 20 H31", "M10 46 H16", "M40 32 H44", "M25 36 H31", "M53 44 H61",
+                 "M25 28 H31", "M10 38 H16", "M40 40 H44", "M25 44 H31"];
+
+function buildDiagram() {
+  dia.innerHTML = "";
+  const fs = n <= 3 ? 22 : n <= 4 ? 18 : 15;
+  const defs = el("defs", {}, dia);
+
+  // bus: segments between consecutive taps, each drawn from the outside in, toward the load tap
+  const taps = [...new Set([...xs, DX, xs[0] - 60, xs.at(-1) + 60])].sort((a, b) => a - b);
+  nodes.bus = [];
+  for (let k = 0; k < taps.length - 1; k++) {
+    const a = taps[k], b = taps[k + 1], left = b <= DX;
+    nodes.bus.push({ a, b, left, w: wire(left ? `M${a} ${BUS_Y} H${b}` : `M${b} ${BUS_Y} H${a}`, 6) });
+  }
+
+  nodes.gens = GENERATORS.map((g, i) => {
+    const x = xs[i];
+    const grp = el("g", { class: "gen" }, dia);
+    const stem = wire(`M${x} ${CY + R} V${BUS_Y - 3}`, 3, grp);
+    el("clipPath", { id: `clip${i}` }, defs).appendChild(el("circle", { cx: x, cy: CY, r: R - 4 }));
+    el("circle", { cx: x, cy: CY, r: R, fill: "#fff", class: "ln", "stroke-width": 3 }, grp);
+    el("path", { d: wavePath(x), class: "wave" }, el("g", { "clip-path": `url(#clip${i})` }, grp));
+    const ring = el("circle", { cx: x, cy: CY, r: R + 9, class: "ring" }, dia);
+    const j = idx(g);
+    math(grp, x, 52, [["q", "i"], [j, "sub"], [` = ${fmt(g.capacity)} MW`]], fs, { "text-anchor": "middle" });
+    math(grp, x, 82, [["p", "i"], [j, "sub"], [` = ${fmt(g.marginal_cost)} $/MWh`]], fs, { "text-anchor": "middle" });
+    const tag = el("g", { opacity: 0, style: "transition: opacity .35s" }, dia);
+    math(tag, x + R + 12, CY - R + 2, [["sets "], ["π", "i"], ["⋆", "sup"]], 15, { class: "amber" });
+    const pl = el("g", {}, dia);
+    return { g, x, grp, stem, ring, tag, pl };
+  });
+
+  nodes.dline = wire(`M${DX} ${BUS_Y + 3} V${D_END}`, 3);
+  el("polyline", { points: `${DX - 9},${D_END - 11} ${DX},${D_END} ${DX + 9},${D_END - 11}`,
+                   class: "ln", "stroke-width": 3 }, dia);
+
+  // load: a small city whose windows light up with the share of demand served
+  const city = el("g", { class: "ln", "stroke-width": 2, "stroke-linejoin": "round",
+                         transform: `translate(${DX - 36} ${CITY_Y})` }, dia);
+  el("path", { d: "M2 58 H70 M6 58 V30 H20 V58 M20 58 V12 H36 V58 M36 58 V24 H48 V58 M48 58 V36 H66 V58" }, city);
+  nodes.windows = WINDOWS.map(d => el("path", { d, class: "win" }, city));
+  nodes.dlabel = el("g", {}, dia);
+}
+
+function renderDiagram(s) {
+  const p = name => (s?.p[name] || 0);
+
+  nodes.gens.forEach(({ g, x, grp, stem, ring, tag, pl }) => {
+    const mw = p(g.name), on = !!s && mw > EPS;
+    grp.classList.toggle("live", on);
+    grp.classList.toggle("idle", !!s && !on);
+    stem.set(mw);
+    const marginal = !!s && g.name === s.marginal;
+    ring.classList.toggle("on", marginal);
+    tag.setAttribute("opacity", marginal ? 1 : 0);
+    pl.innerHTML = "";
+    if (s) math(pl, x + 12, CY + R + 40, [["g", "i"], ["⋆", "sup"], [idx(g), "sub"], [` = ${fmt(mw)}`]], 18,
+                { class: on ? "amber" : "", opacity: on ? 1 : 0.35 });
+  });
+
+  nodes.bus.forEach(({ a, b, left, w }) => {
+    w.set(!s ? 0 : nodes.gens.filter(({ x }) => left ? x <= a : x >= b).reduce((t, { g }) => t + p(g.name), 0));
+  });
+  nodes.dline.set(s ? s.served : 0);
+
+  const share = s && state.demand > EPS ? s.served / state.demand : 0;
+  const lit = Math.round(share * nodes.windows.length);
+  nodes.windows.forEach((w, k) => w.classList.toggle("lit", k < lit));
+
+  nodes.dlabel.innerHTML = "";
+  math(nodes.dlabel, DX, CITY_Y + 98, [["d", "i"], [` = ${fmt(state.demand)} MW`]], 22, { "text-anchor": "middle" });
+  if (s?.shortage)
+    math(nodes.dlabel, DX, CITY_Y + 124, [[`${fmt(state.demand - s.served)} MW unserved`]], 16,
+         { "text-anchor": "middle", style: "fill: #b3261e" });
+}
+
+// ---------------------------------------------------------------------------
+// Figure 2: supply curve with cost (shaded) and producer surplus (hatched)
+// ---------------------------------------------------------------------------
+const cv = document.getElementById("curve");
+const C = { w: 440, h: 300, l: 58, r: 28, t: 22, b: 46 };
+
+function renderCurve(s) {
+  cv.innerHTML = "";
+  const yMax = Math.max(...merit.map(g => g.marginal_cost), s?.shortage ? state.cap : 0) * 1.15;
+  const X = q => C.l + (q / D_MAX) * (C.w - C.l - C.r);
+  const Y = c => C.h - C.b - (c / yMax) * (C.h - C.t - C.b);
+  const x0 = X(0), y0 = Y(0);
+
+  const defs = el("defs", {}, cv);
+  const mk = el("marker", { id: "arr", viewBox: "0 0 10 10", refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: "auto-start-reverse" }, defs);
+  el("path", { d: "M0 1 L9 5 L0 9", fill: "none", stroke: "var(--ink)", "stroke-width": 1.4 }, mk);
+  const hatch = el("pattern", { id: "hatch", width: 6, height: 6, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" }, defs);
+  el("line", { x1: 0, y1: 0, x2: 0, y2: 6, stroke: "var(--amber)", "stroke-width": 1.4 }, hatch);
+
+  // areas first, so lines sit on top
+  if (s) {
+    let q = 0;
+    for (const g of merit) {
+      const mw = s.p[g.name] || 0;
+      if (mw <= EPS) continue;
+      const xa = X(q), wpx = X(q + mw) - xa;
+      el("rect", { x: xa, y: Y(g.marginal_cost), width: wpx, height: y0 - Y(g.marginal_cost), fill: "var(--amber-soft)" }, cv);
+      if (s.price > g.marginal_cost)
+        el("rect", { x: xa, y: Y(s.price), width: wpx, height: Y(g.marginal_cost) - Y(s.price), fill: "url(#hatch)" }, cv);
+      q += mw;
+    }
+  }
+
+  el("path", { d: `M${x0} ${y0} H${C.w - 6}`, class: "axis", "marker-end": "url(#arr)" }, cv);
+  el("path", { d: `M${x0} ${y0} V${C.t - 14}`, class: "axis", "marker-end": "url(#arr)" }, cv);
+  math(cv, C.w - 4, y0 + 34, [["q", "i"], [" (MW)"]], 15, { "text-anchor": "end" });
+  math(cv, x0 - 8, C.t - 18, [["p", "i"], [" ($/MWh)"]], 15);
+  math(cv, x0 - 8, y0 + 18, [["0"]], 13, { "text-anchor": "end", class: "tick" });
+
+  let q = 0, d = "";
+  const yTicks = new Set();
+  merit.forEach(g => {
+    d += (d ? `V${Y(g.marginal_cost)}` : `M${X(q)} ${Y(g.marginal_cost)}`) + `H${X(q + g.capacity)}`;
+    math(cv, X(q + g.capacity / 2), Y(g.marginal_cost) - 8, [["G", "i"], [idx(g), "sub"]], 15, { "text-anchor": "middle" });
+    q += g.capacity;
+    el("line", { x1: X(q), x2: X(q), y1: y0, y2: y0 + 5, class: "axis" }, cv);
+    math(cv, X(q), y0 + 18, [[fmt(q)]], 13, { "text-anchor": "middle", class: "tick" });
+    yTicks.add(g.marginal_cost);
+  });
+  el("path", { d, class: "step" }, cv);
+  if (s?.shortage) yTicks.add(state.cap);
+  yTicks.forEach(c => {
+    el("line", { x1: x0 - 5, x2: x0, y1: Y(c), y2: Y(c), class: "axis" }, cv);
+    math(cv, x0 - 8, Y(c) + 4, [[fmt(c)]], 13, { "text-anchor": "end", class: "tick" });
+  });
+
+  const dx = X(state.demand);
+  el("line", { x1: dx, x2: dx, y1: y0, y2: C.t, class: "guide" }, cv);
+  math(cv, dx + 5, C.t + 8, [["d", "i"]], 17);
+
+  if (s) {
+    const py = Y(s.price);
+    el("line", { x1: x0, x2: dx, y1: py, y2: py, class: "guide" }, cv);
+    math(cv, x0 + 6, py - 6, [["π", "i"], ["⋆", "sup"]], 17);
+    if (!s.shortage) el("circle", { cx: dx, cy: py, r: 4.5, fill: "var(--ink)" }, cv);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Table 1 and the solution line (2)
+// ---------------------------------------------------------------------------
+function renderTable(s) {
+  const tbody = document.getElementById("rows");
+  tbody.innerHTML = "";
+  GENERATORS.forEach(g => {
+    const p = s ? (s.p[g.name] || 0) : null;
+    const idle = s && p <= EPS;
+    const tr = document.createElement("tr");
+    if (idle) tr.className = "idle";
+    const i = GENERATORS.indexOf(g);
+    tr.innerHTML = `<td></td>
+      <td><input class="num" type="number" step="any" min="0" data-i="${i}" data-k="capacity" value="${g.capacity}"
+                 aria-label="Quantity bid of generator ${idx(g)}, MW"></td>
+      <td><input class="num" type="number" step="any" data-i="${i}" data-k="marginal_cost" value="${g.marginal_cost}"
+                 aria-label="Price bid of generator ${idx(g)}, $/MWh"></td>
+      <td class="${s && !idle ? "p" : ""}">${s ? fmt(p) : "–"}</td>
+      <td><span class="bar"><i style="width:${s ? 100 * p / g.capacity : 0}%"></i></span></td>
+      <td><button class="x" type="button" data-del="${i}" aria-label="Remove generator ${idx(g)}"
+                  ${GENERATORS.length <= 1 ? "disabled" : ""}>×</button></td>`;
+    tex(tr.firstChild, `G_{${idx(g)}}`);
+    tbody.appendChild(tr);
+  });
+
+  const full = GENERATORS.length >= MAX_GENS;
+  tex(document.getElementById("newLabel"), `G_{${GENERATORS.length + 1}}`);
+  ["newQ", "newP", "add"].forEach(id => { document.getElementById(id).disabled = full; });
+  document.getElementById("newLabel").style.visibility = full ? "hidden" : "";
+}
+
+// ---------------------------------------------------------------------------
+// Editing bids
+// ---------------------------------------------------------------------------
+const err = document.getElementById("err");
+const newQ = document.getElementById("newQ");
+const newP = document.getElementById("newP");
+
+// Returns the parsed number, or null (and flags the input) if it isn't a valid bid.
+function readBid(input, kind) {
+  const v = input.value.trim() === "" ? NaN : Number(input.value);
+  const ok = Number.isFinite(v) && (kind === "price" || v > 0);
+  input.classList.toggle("bad", !ok);
+  if (!ok) err.textContent = kind === "price"
+    ? "Enter a price bid in $/MWh. Negative bids are allowed."
+    : "Enter a quantity bid greater than 0 MW.";
+  return ok ? v : null;
+}
+
+function onBidsChanged() {
+  err.textContent = "";
+  recompute();
+  buildDiagram();
+  slider.max = D_MAX;
+  state.demand = Math.min(state.demand, D_MAX);
+  slider.value = state.demand;
+  render();
+}
+
+document.getElementById("rows").addEventListener("change", e => {
+  const inp = e.target.closest("input.num");
+  if (!inp) return;
+  const k = inp.dataset.k;
+  const v = readBid(inp, k === "marginal_cost" ? "price" : "quantity");
+  if (v === null) return;
+  GENERATORS[+inp.dataset.i][k] = v;
+  onBidsChanged();
+});
+document.getElementById("rows").addEventListener("click", e => {
+  const b = e.target.closest("button.x");
+  if (!b || GENERATORS.length <= 1) return;
+  GENERATORS.splice(+b.dataset.del, 1);
+  onBidsChanged();
+});
+
+function submitBid() {
+  if (GENERATORS.length >= MAX_GENS) return;
+  const q = readBid(newQ, "quantity");
+  if (q === null) return;
+  const p = readBid(newP, "price");
+  if (p === null) return;
+  GENERATORS.push({ name: "", capacity: q, marginal_cost: p });
+  newQ.value = ""; newP.value = "";
+  onBidsChanged();
+  newQ.focus();
+}
+document.getElementById("add").addEventListener("click", submitBid);
+[newQ, newP].forEach(inp => inp.addEventListener("keydown", e => { if (e.key === "Enter") submitBid(); }));
+document.getElementById("example").addEventListener("click", () => {
+  GENERATORS = EXAMPLE.map(g => ({ ...g }));
+  state.demand = DEFAULT_DEMAND;
+  newQ.value = ""; newP.value = "";
+  [newQ, newP].forEach(i => i.classList.remove("bad"));
+  onBidsChanged();
+});
+
+function renderSolution(s) {
+  const box = document.getElementById("solution");
+  box.innerHTML = "";
+  box.classList.toggle("muted", !s);
+  if (!s) { box.textContent = "Press Dispatch to solve (1)."; return; }
+  const p = GENERATORS.map(g => fmt(s.p[g.name] || 0)).join(",\\ ");
+  const m = s.marginal && GENERATORS.find(g => g.name === s.marginal);
+  let src = `g^\\star = (${p})\\ \\text{MW}, \\qquad \\pi^\\star = `;
+  src += m ? `p_{${idx(m)}} = ${fmt(s.price)}\\ \\$/\\text{MWh}`
+           : `\\bar{\\pi} = ${fmt(s.price)}\\ \\$/\\text{MWh}\\ \\text{(cap)}`;
+  if (s.shortage) src += `, \\qquad d - \\textstyle\\sum_i g_i^\\star = ${fmt(state.demand - s.served)}\\ \\text{MW}`;
+  const span = document.createElement("span");
+  tex(span, src, true);
+  const no = document.createElement("span");
+  no.className = "no"; no.textContent = "(2)";
+  box.append(span, no);
+}
+
+// ---------------------------------------------------------------------------
+// Wiring
+// ---------------------------------------------------------------------------
+const slider = document.getElementById("demand");
+const out = document.getElementById("demandVal");
+const go = document.getElementById("go");
+
+function render() {
+  const s = solve();
+  out.textContent = `${fmt(state.demand)} MW`;
+  go.textContent = state.live ? "Reset" : "Dispatch";
+  renderDiagram(s);
+  renderCurve(s);
+  renderTable(s);
+  renderSolution(s);
+}
+slider.addEventListener("input", e => { state.demand = +e.target.value; render(); });
+go.addEventListener("click", () => { state.live = !state.live; render(); });
+const capInput = document.getElementById("cap");
+capInput.addEventListener("change", () => {
+  const v = Number(capInput.value);
+  const ok = capInput.value.trim() !== "" && Number.isFinite(v) && v > 0;
+  capInput.classList.toggle("bad", !ok);
+  if (ok) { state.cap = v; render(); } else capInput.value = state.cap;
+});
+
+document.querySelectorAll("[data-tex]").forEach(n => tex(n, n.dataset.tex));
+document.querySelectorAll("[data-tex-display]").forEach(n => tex(n, n.dataset.texDisplay, true));
+document.getElementById("today").textContent =
+  new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+
+onBidsChanged();
+</script>
+</body>
+</html>

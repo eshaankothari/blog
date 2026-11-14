@@ -1,0 +1,720 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Simulated Market</title>
+<!-- KaTeX: Computer Modern fonts + LaTeX math rendering -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<!-- Real ERCOT bids, written by ercot_data.py (optional) -->
+<script src="/blog/energy-markets/assets/ercot_market.js"></script>
+<script src="/blog/energy-markets/assets/texas_counties.js"></script>
+<style>
+  :root {
+    --ink: #111111;
+    --grey: #a3a3a3;
+    --amber: #e8a200;
+    --amber-ink: #9a6400;
+    --amber-soft: #fbecc4;
+    --bg: #ffffff;
+    --main: "KaTeX_Main", "Latin Modern Roman", "CMU Serif", Georgia, serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 18px/1.5 var(--main); }
+  .wrap { max-width: 1160px; margin: 0 auto; padding: 48px 24px 72px; }
+  .katex { font-size: 1.05em; }
+
+  .title { text-align: center; margin-bottom: 28px; }
+  .title h1 { font-weight: 400; font-size: 30px; margin: 0 0 10px; }
+  .title p { margin: 0; }
+  nav.chapters { text-align: center; font-size: 15px; margin: -16px 0 22px; color: var(--grey); }
+  nav.chapters a { color: inherit; text-decoration: none; margin: 0 6px; }
+  nav.chapters a:hover { text-decoration: underline; }
+  nav.chapters a[aria-current="page"] { color: var(--ink); }
+  .abstract { max-width: 660px; margin: 0 auto 8px; font-size: 16px; text-align: justify; hyphens: auto; }
+  .abstract h2 { text-align: center; font-size: 16px; font-weight: 700; margin: 0 0 4px; }
+  .eq { position: relative; text-align: center; margin: 14px 0 6px; min-height: 2em; }
+  .eq .no { position: absolute; right: 0; top: 50%; transform: translateY(-50%); }
+  .eq.muted { color: var(--grey); font-style: italic; }
+
+  h2.sec { font-size: 21px; font-weight: 700; margin: 36px 0 12px; }
+  h2.sec span { display: inline-block; width: 1.6em; }
+
+  .controls { display: grid; grid-template-columns: auto 220px auto; gap: 8px 16px; align-items: center; justify-content: start; }
+  .controls input[type=range] { width: 220px; accent-color: var(--ink); }
+  .controls output { min-width: 200px; }
+  .buttons { display: flex; gap: 10px; margin: 12px 0 4px; }
+  button {
+    font: inherit; font-size: 16px; cursor: pointer; padding: 3px 14px;
+    border: 1px solid var(--ink); border-radius: 0; background: var(--bg); color: var(--ink);
+  }
+  button:hover { background: var(--ink); color: var(--bg); }
+  :focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+
+  .grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 44px; align-items: start; margin-top: 18px; }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } .eq .no { position: static; transform: none; margin-left: 1em; } }
+  figure { margin: 0; }
+  figure + figure { margin-top: 28px; }
+  figcaption { font-size: 16px; margin-top: 8px; text-align: center; }
+  .dock { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px;
+          margin: 16px 0 0; padding: 10px 0; background: var(--bg); border-bottom: 1px solid #e4e4e4; }
+  .dock input[type=range] { width: 260px; accent-color: var(--ink); }
+  .dock output { min-width: 300px; }
+  #dockPrice { margin-left: auto; color: var(--amber-ink); }
+  #mapFig { max-width: 440px; margin: 24px auto 0; }
+  #mapFig figcaption { font-size: 14.5px; }
+  figure.table { margin-top: 36px; }
+  .grid > figure { margin-top: 0; }
+  figure.table figcaption { margin: 0 0 8px; }
+  svg { display: block; width: 100%; height: auto; overflow: visible; }
+  svg text { font-family: var(--main); fill: var(--ink); }
+  .fleet label { margin-right: 14px; white-space: nowrap; }
+  .fleet input { accent-color: var(--ink); }
+  .controls output.small { font-size: 15px; }
+  input.num { font: inherit; width: 80px; text-align: right; border: 0; border-bottom: 1px solid var(--grey);
+              background: transparent; padding: 1px 2px; -moz-appearance: textfield; }
+  input.num::-webkit-inner-spin-button, input.num::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+  input.num:focus { outline: none; border-bottom-color: var(--ink); }
+  input.num.bad { border-bottom-color: #b3261e; }
+  .sw { display: inline-block; width: 14px; height: 3px; vertical-align: middle; margin: 0 4px 0 10px; }
+
+  /* Figure 1 */
+  .ln { fill: none; stroke: var(--ink); }
+  .flow { fill: none; stroke: var(--amber); stroke-linecap: round; stroke-dasharray: 0 14; opacity: 0;
+          transition: opacity .35s; animation: flow .65s linear infinite; }
+  .flow.live { opacity: 1; }
+  @keyframes flow { to { stroke-dashoffset: -14; } }
+  .wave { fill: none; stroke: var(--ink); stroke-width: 2.6; stroke-linecap: round; transition: stroke .35s; }
+  .gen.live .wave { stroke: var(--amber); animation: wave 1.1s linear infinite; }
+  @keyframes wave { to { transform: translateX(-40px); } }
+  .gen { transition: opacity .35s; }
+  .gen.idle { opacity: .3; }
+  .ring { fill: none; stroke: var(--amber); stroke-width: 1.6; stroke-dasharray: 4 5; opacity: 0;
+          transform-box: fill-box; transform-origin: center; animation: spin 9s linear infinite; transition: opacity .35s; }
+  .ring.on { opacity: 1; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .win { stroke: #d9d9d9; stroke-width: 2; transition: stroke .35s; }
+  .win.lit { stroke: var(--amber); }
+  .amber { fill: var(--amber-ink) !important; }
+  .muted { fill: var(--grey) !important; }
+
+  /* Figure 3: map */
+  .county { fill: #fafafa; stroke: #dddddd; stroke-width: 0.5; }
+  .dot { stroke: #fff; stroke-width: 0.3; fill-opacity: 0.85; transition: opacity .45s; }
+  .dot.gone { opacity: 0; }
+
+  /* Figure 2 */
+  .axis { stroke: var(--ink); stroke-width: 1.2; fill: none; }
+  .riser { stroke: #d4d4d4; stroke-width: 0.7; fill: none; }
+  .guide { stroke: var(--ink); stroke-width: 1; stroke-dasharray: 3 4; }
+  .tick { font-size: 13px; }
+
+  /* Table 1 */
+  table { border-collapse: collapse; width: 100%; font-size: 17px; font-variant-numeric: tabular-nums; }
+  th, td { padding: 5px 10px; text-align: right; font-weight: 400; }
+  th:first-child, td:first-child { text-align: left; }
+  thead tr { border-top: 1.5px solid var(--ink); border-bottom: 1px solid var(--ink); }
+  tbody tr:last-child { border-bottom: 1px solid var(--ink); }
+  tfoot tr { border-bottom: 1.5px solid var(--ink); }
+  td.g { color: var(--amber-ink); }
+  tr.idle td { color: var(--grey); }
+  .bar { display: inline-block; width: 90px; height: 8px; background: #efefef; vertical-align: middle; }
+  .bar i { display: block; height: 100%; background: var(--amber); transition: width .4s; }
+
+  @media (prefers-reduced-motion: reduce) { .flow, .ring, .gen.live .wave { animation: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="chapters"><a href="/blog/energy-markets">Contents</a>·<a href="/blog/energy-markets/chapter-1.html">Chapter 1</a>·<a href="/blog/energy-markets/chapter-2.html" aria-current="page">Chapter 2</a></nav>
+  <div class="title">
+    <h1><strong>A Simulated Electricity Market</strong> </br>Simple Merit-Order Dispatch</h1>
+    <p>Economics 256</p>
+    <p id="today"></p>
+  </div>
+
+  <div class="abstract">
+    <h2>Abstract</h2>
+    We draw a synthetic fleet of <span data-tex="N"></span> generators across six technologies. Each generator
+    <span data-tex="i"></span> bids a quantity <span data-tex="q_i"></span> at price <span data-tex="p_i"></span>,
+    with sizes and prices drawn from distributions typical of its technology. The market clears by solving (1)
+    for demand <span data-tex="d"></span>: bids are stacked in merit order, and the last bid needed sets the clearing price
+    <span data-tex="\pi^\star"></span>. Switching the fleet to ERCOT replaces the draw with the real offers of every
+    online generator in Texas during one five-minute interval.
+  </div>
+  <div class="eq"><span data-tex-display="\min_{g}\ \sum_{i=1}^{N} p_i\,g_i \quad \text{s.t.} \quad \sum_{i=1}^{N} g_i = d \;\;(\pi^\star), \qquad 0 \le g_i \le q_i"></span><span class="no">(1)</span></div>
+
+  <h2 class="sec"><span>1</span>Simulation</h2>
+  <div class="controls">
+    <span>Fleet</span>
+    <span class="fleet"><label><input type="radio" name="fleet" value="synthetic" checked> Synthetic</label><label><input type="radio" name="fleet" value="ercot"> ERCOT</label></span>
+    <output id="fleetInfo" class="small"></output>
+    <label for="nGen">Generators <span data-tex="N"></span></label>
+    <input id="nGen" type="range" min="50" max="5000" step="50" value="500">
+    <output id="nVal" for="nGen"></output>
+    <label for="cap">Price cap <span data-tex="\bar{\pi}"></span></label>
+    <span><input id="cap" class="num" type="number" min="0" step="any" value="500" aria-label="Price cap, $/MWh"> $/MWh</span>
+    <output id="capNote" class="small"></output>
+  </div>
+  <div class="buttons">
+    <button id="reseed" type="button">New fleet</button>
+  </div>
+  <!-- stays pinned to the top while scrolling, so demand can be dragged while watching the figures -->
+  <div class="dock">
+    <label for="demand">Demand <span data-tex="d"></span></label>
+    <input id="demand" type="range" min="0" max="105" step="0.5" value="65">
+    <output id="dVal" for="demand"></output>
+    <button id="go" type="button">Dispatch</button>
+    <span id="dockPrice"></span>
+  </div>
+  <div class="eq" id="solution"></div>
+
+  <div class="grid">
+    <div>
+      <figure>
+        <svg id="diagram" viewBox="0 0 760 480" role="img" aria-label="Generators grouped by technology on a single bus"></svg>
+        <figcaption>Figure 1: The fleet, one node per technology. Dots show cleared power flowing to load.</figcaption>
+      </figure>
+      <figure id="mapFig" hidden>
+        <svg id="map" role="img" aria-label="Map of ERCOT generators by county"></svg>
+        <figcaption id="mapCap"></figcaption>
+      </figure>
+    </div>
+    <figure>
+      <svg id="curve" viewBox="0 0 460 330" role="img" aria-label="Merit-order supply curve of all bids"></svg>
+      <figcaption>Figure 2: Merit-order supply curve of all bids, coloured by technology. The thin strip on the axis shows which technology supplies each slice of the stack; faded slices do not clear. Shaded: total cost; hatched: producer surplus.<span id="clipNote"></span><br><span id="legend"></span></figcaption>
+    </figure>
+  </div>
+
+  <figure class="table">
+    <figcaption>Table 1: Bids and dispatch by technology.</figcaption>
+    <table>
+      <thead><tr><th>Technology</th><th>Units</th><th><span data-tex="\sum q_i"></span></th><th><span data-tex="p_i"></span> range ($/MWh)</th>
+        <th>Units cleared</th><th><span data-tex="\sum g_i^\star"></span></th><th><span data-tex="\sum g_i^\star / \sum q_i"></span></th></tr></thead>
+      <tbody id="rows"></tbody>
+      <tfoot id="total"></tfoot>
+    </table>
+  </figure>
+</div>
+
+<script>
+// ---------------------------------------------------------------------------
+// JS port of simulation.py -> clear_simple_market (keep in sync with Python).
+// Returns { dispatched: [[name, qty, mc], ...], price }
+// ---------------------------------------------------------------------------
+const PRICE_CAP = 500;                   // default cap, same as simulation.py
+const EPS = 1e-9;
+
+function clearSimpleMarket(generators, demand, priceCap = PRICE_CAP) {
+  if (typeof demand !== "number" || !Number.isFinite(demand) || demand < 0)
+    throw new Error(`demand must be a finite number >= 0, got ${demand}`);
+  if (demand <= EPS) return { dispatched: [], price: 0 };
+
+  const sorted = [...(generators || [])].sort((a, b) => a.marginal_cost - b.marginal_cost);
+  const dispatched = [];
+  let price = priceCap;                  // default = shortage; overwritten once demand is met
+  for (const g of sorted) {
+    if (g.capacity <= 0) continue;
+    if (g.capacity < demand - EPS) {
+      dispatched.push([g.name, g.capacity, g.marginal_cost]);
+      demand -= g.capacity;
+    } else {
+      dispatched.push([g.name, Math.min(demand, g.capacity), g.marginal_cost]);
+      price = g.marginal_cost;
+      break;
+    }
+  }
+  return { dispatched, price };
+}
+
+// ---------------------------------------------------------------------------
+// Synthetic fleet. Each technology: share of units, lognormal size (median MW, sigma),
+// and a price-bid distribution ($/MWh). Edit to taste.
+// ---------------------------------------------------------------------------
+const TECHS = [
+  { key: "solar",   label: "Solar",   color: "#d9b310", share: 0.25, size: [20, 0.8],   price: r => 2 * r.u() },
+  { key: "wind",    label: "Wind",    color: "#3f9c9e", share: 0.20, size: [50, 0.5],   price: r => 5 * r.u() },
+  { key: "nuclear", label: "Nuclear", color: "#7b5ea7", share: 0.03, size: [1000, 0.2], price: r => r.n(12, 2) },
+  { key: "coal",    label: "Coal",    color: "#5a5a5a", share: 0.09, size: [400, 0.4],  price: r => r.n(32, 6) },
+  { key: "gascc",   label: "Gas CC",  color: "#2f6db5", share: 0.20, size: [300, 0.4],  price: r => r.n(48, 8) },
+  { key: "peaker",  label: "Peaker",  color: "#c4462f", share: 0.23, size: [60, 0.5],   price: r => Math.max(55, r.n(95, 25)) },
+];
+const TECH = Object.fromEntries(TECHS.map(t => [t.key, t]));
+
+function rng(seed) {                       // mulberry32 + Box-Muller
+  let a = seed >>> 0;
+  const u = () => {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  const z = () => Math.sqrt(-2 * Math.log(1 - u())) * Math.cos(2 * Math.PI * u());
+  return { u, n: (mu, sd) => mu + sd * z() };
+}
+
+function makeFleet(N, seed) {
+  const r = rng(seed);
+  const cum = [];
+  TECHS.reduce((s, t) => (cum.push(s + t.share), s + t.share), 0);
+  const fleet = [];
+  for (let i = 0; i < N; i++) {
+    const x = r.u() * cum.at(-1);
+    const t = TECHS[cum.findIndex(c => x < c)];
+    const [median, sigma] = t.size;
+    fleet.push({
+      name: `U${i + 1}`,
+      tech: t.key,
+      capacity: Math.max(1, Math.round(median * Math.exp(sigma * r.n(0, 1)) * 10) / 10),
+      marginal_cost: Math.max(0, Math.round(t.price(r) * 100) / 100),
+    });
+  }
+  return fleet;
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+const NS = "http://www.w3.org/2000/svg";
+function el(tag, attrs = {}, parent) {
+  const n = document.createElementNS(NS, tag);
+  for (const k in attrs) n.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(n);
+  return n;
+}
+function tex(node, src, display = false) {
+  try { katex.render(src, node, { displayMode: display, throwOnError: false }); }
+  catch { node.textContent = src; }
+}
+// Math-style SVG label. tokens: [text, style]; style may contain "i" (math italic), "sub" or "sup".
+function math(parent, x, y, tokens, size, attrs = {}) {
+  const t = el("text", { x, y, "font-size": size, ...attrs }, parent);
+  let off = 0;
+  for (const [s, st = ""] of tokens) {
+    const sp = el("tspan", {}, t);
+    if (st.includes("i")) { sp.setAttribute("font-family", "KaTeX_Math, serif"); sp.setAttribute("font-style", "italic"); }
+    const target = st.includes("sub") ? size * 0.25 : st.includes("sup") ? -size * 0.38 : 0;
+    if (target) sp.setAttribute("font-size", size * 0.7);
+    if (target !== off) sp.setAttribute("dy", target - off);
+    if (st.includes("sub") && off < 0) sp.setAttribute("dx", -size * 0.42);
+    off = target;
+    sp.textContent = s;
+  }
+  return t;
+}
+const num = v => Math.round(v).toLocaleString();
+const mw = v => v >= 1000 ?`${(v / 1000).toFixed(1)} GW` : `${num(v)} MW`;
+const usd = v => v.toFixed(2);
+function niceStep(max, count = 5) {
+  const raw = max / count, p = 10 ** Math.floor(Math.log10(raw)), m = raw / p;
+  return (m < 1.5 ? 1 : m < 3 ? 2 : m < 7 ? 5 : 10) * p;
+}
+
+// ---------------------------------------------------------------------------
+// State
+// ---------------------------------------------------------------------------
+const ERCOT = window.ERCOT_MARKET || null;
+TECHS.forEach(t => { t.baseLabel = t.label; });
+const CAPS = { synthetic: 500, ercot: 2000 };   // default price cap per fleet; editable on the page
+const state = { source: "synthetic", N: 500, seed: 256, frac: 0.65, live: false, cap: CAPS.synthetic };
+// fleet: one entry per bid segment; g.unit is the generator it belongs to (a real ERCOT unit offers several segments)
+let fleet, byName, TOTAL, techTotals, merit, UNITS;
+
+function regenerate() {
+  if (state.source === "ercot") {
+    fleet = ERCOT.bids.map(([ri, ti, q, p], k) => ({
+      name: `b${k}`, unit: ERCOT.resources[ri], tech: ERCOT.tech_keys[ti], capacity: q, marginal_cost: p }));
+  } else {
+    fleet = makeFleet(state.N, state.seed).map(g => ({ ...g, unit: g.name }));
+  }
+  const order = Object.fromEntries(TECHS.map((t, i) => [t.key, i]));
+  fleet.sort((a, b) => order[a.tech] - order[b.tech]);   // equal-price bids then clear grouped by technology
+  TECHS.forEach(t => { t.label = (state.source === "ercot" && ERCOT.tech_labels?.[t.key]) || t.baseLabel; });
+  byName = new Map(fleet.map(g => [g.name, g]));
+  TOTAL = fleet.reduce((s, g) => s + g.capacity, 0);
+  UNITS = new Set(fleet.map(g => g.unit)).size;
+  merit = [...fleet].sort((a, b) => a.marginal_cost - b.marginal_cost);
+  techTotals = Object.fromEntries(TECHS.map(t => [t.key, { units: new Set(), q: 0, pmin: Infinity, pmax: -Infinity }]));
+  for (const g of fleet) {
+    const s = techTotals[g.tech];
+    s.units.add(g.unit); s.q += g.capacity;
+    s.pmin = Math.min(s.pmin, g.marginal_cost); s.pmax = Math.max(s.pmax, g.marginal_cost);
+  }
+  for (const t of Object.values(techTotals)) t.n = t.units.size;
+}
+const demand = () => state.frac * TOTAL;
+
+function solve() {
+  if (!state.live) return null;
+  const d = demand();
+  const r = clearSimpleMarket(fleet, d, state.cap);
+  const perTech = Object.fromEntries(TECHS.map(t => [t.key, { g: 0, units: new Set() }]));
+  const cleared = new Set();
+  let served = 0;
+  for (const [name, q] of r.dispatched) {
+    const g = byName.get(name), s = perTech[g.tech];
+    s.g += q; s.units.add(g.unit); cleared.add(g.unit); served += q;
+  }
+  for (const s of Object.values(perTech)) s.k = s.units.size;
+  const shortage = d - served > EPS;
+  const marginal = !shortage && r.dispatched.length ? byName.get(r.dispatched.at(-1)[0]) : null;
+  return { ...r, perTech, served, shortage, marginal, k: cleared.size, cleared };
+}
+
+// ---------------------------------------------------------------------------
+// Figure 1: one node per technology
+// ---------------------------------------------------------------------------
+const dia = document.getElementById("diagram");
+const CY = 150, R = 28, BUS_Y = 262, D_END = 322, CITY_Y = 334, DX = 380;
+const xs = TECHS.map((_, i) => DX + (i - (TECHS.length - 1) / 2) * 120);
+const WINDOWS = ["M25 20 H31", "M10 46 H16", "M40 32 H44", "M25 36 H31", "M53 44 H61",
+                 "M25 28 H31", "M10 38 H16", "M40 40 H44", "M25 44 H31"];
+let nodes = {};
+
+function wire(d, width, parent = dia) {
+  el("path", { d, class: "ln", "stroke-width": width }, parent);
+  const dots = el("path", { d, class: "flow" }, parent);
+  return {
+    set(v, ref) {
+      const on = v > EPS;
+      dots.classList.toggle("live", on);
+      dots.style.strokeWidth = on ? 3.5 + 4.5 * Math.min(1, v / ref) : 0;
+    }
+  };
+}
+function wavePath(cx) {
+  const P = 40, A = 8;
+  let d = "";
+  for (let x = -2 * P; x <= 2 * P; x += 1)
+    d += (d ? "L" : "M") + (cx + x) + " " + (CY + A * Math.sin(2 * Math.PI * x / P)).toFixed(2);
+  return d;
+}
+
+function buildDiagram() {
+  dia.innerHTML = "";
+  nodes = {};
+  const defs = el("defs", {}, dia);
+  const taps = [...new Set([...xs, DX, xs[0] - 50, xs.at(-1) + 50])].sort((a, b) => a - b);
+  nodes.bus = [];
+  for (let k = 0; k < taps.length - 1; k++) {
+    const a = taps[k], b = taps[k + 1], left = b <= DX;
+    nodes.bus.push({ a, b, left, w: wire(left ? `M${a} ${BUS_Y} H${b}` : `M${b} ${BUS_Y} H${a}`, 6) });
+  }
+  nodes.gens = TECHS.map((t, i) => {
+    const x = xs[i], s = techTotals[t.key];
+    const grp = el("g", { class: "gen" }, dia);
+    const stem = wire(`M${x} ${CY + R} V${BUS_Y - 3}`, 3, grp);
+    el("clipPath", { id: `clip${i}` }, defs).appendChild(el("circle", { cx: x, cy: CY, r: R - 4 }));
+    el("circle", { cx: x, cy: CY, r: R, fill: "#fff", class: "ln", "stroke-width": 2.6 }, grp);
+    el("path", { d: wavePath(x), class: "wave" }, el("g", { "clip-path": `url(#clip${i})` }, grp));
+    el("line", { x1: x - 14, x2: x + 14, y1: 26, y2: 26, stroke: t.color, "stroke-width": 3 }, grp);
+    math(grp, x, 48, [[t.label]], 17, { "text-anchor": "middle" });
+    math(grp, x, 70, [["n", "i"], [` = ${num(s.n)}`]], 15, { "text-anchor": "middle" });
+    math(grp, x, 90, [["Σ"], ["q", "i"], [` = ${mw(s.q)}`]], 15, { "text-anchor": "middle" });
+    const ring = el("circle", { cx: x, cy: CY, r: R + 8, class: "ring" }, dia);
+    const tag = el("g", { opacity: 0, style: "transition: opacity .35s" }, dia);
+    math(tag, x + R + 6, CY - R, [["sets "], ["π", "i"], ["⋆", "sup"]], 13, { class: "amber" });
+    const pl = el("g", {}, dia);
+    return { t, x, grp, stem, ring, tag, pl };
+  });
+  nodes.dline = wire(`M${DX} ${BUS_Y + 3} V${D_END}`, 3);
+  el("polyline", { points: `${DX - 9},${D_END - 11} ${DX},${D_END} ${DX + 9},${D_END - 11}`, class: "ln", "stroke-width": 3 }, dia);
+  const city = el("g", { class: "ln", "stroke-width": 2, "stroke-linejoin": "round", transform: `translate(${DX - 36} ${CITY_Y})` }, dia);
+  el("path", { d: "M2 58 H70 M6 58 V30 H20 V58 M20 58 V12 H36 V58 M36 58 V24 H48 V58 M48 58 V36 H66 V58" }, city);
+  nodes.windows = WINDOWS.map(d => el("path", { d, class: "win" }, city));
+  nodes.dlabel = el("g", {}, dia);
+}
+
+function renderDiagram(s) {
+  const ref = Math.max(...TECHS.map(t => techTotals[t.key].q), 1);
+  const g = key => (s ? s.perTech[key].g : 0);
+  nodes.gens.forEach(({ t, x, grp, stem, ring, tag, pl }) => {
+    const v = g(t.key), on = !!s && v > EPS;
+    grp.classList.toggle("live", on);
+    grp.classList.toggle("idle", !!s && !on);
+    stem.set(v, ref);
+    const marg = !!s && s.marginal?.tech === t.key;
+    ring.classList.toggle("on", marg);
+    tag.setAttribute("opacity", marg ? 1 : 0);
+    pl.innerHTML = "";
+    if (s) {
+      math(pl, x + 8, CY + R + 36, [["Σ"], ["g", "i"], ["⋆", "sup"], [` = ${mw(v)}`]], 14, { class: on ? "amber" : "muted" });
+      math(pl, x + 8, CY + R + 54, [[`${num(s.perTech[t.key].k)} / ${num(techTotals[t.key].n)} units`]], 12, { class: "muted" });
+    }
+  });
+  nodes.bus.forEach(({ a, b, left, w }) => {
+    const flow = !s ? 0 : nodes.gens.filter(({ x }) => left ? x <= a : x >= b).reduce((sum, { t }) => sum + g(t.key), 0);
+    w.set(flow, TOTAL * 0.5);
+  });
+  nodes.dline.set(s ? s.served : 0, TOTAL * 0.5);
+  const lit = s && demand() > EPS ? Math.round(s.served / demand() * nodes.windows.length) : 0;
+  nodes.windows.forEach((w, k) => w.classList.toggle("lit", k < lit));
+  nodes.dlabel.innerHTML = "";
+  math(nodes.dlabel, DX, CITY_Y + 98, [["d", "i"], [` = ${mw(demand())}`]], 22, { "text-anchor": "middle" });
+  if (s?.shortage)
+    math(nodes.dlabel, DX, CITY_Y + 124, [[`${mw(demand() - s.served)} unserved`]], 16,
+         { "text-anchor": "middle", style: "fill: #b3261e" });
+}
+
+// ---------------------------------------------------------------------------
+// Figure 3: map of ERCOT units by county (ERCOT fleet only; locations from ercot_data.py)
+// ---------------------------------------------------------------------------
+const TX = window.TX_COUNTIES || null;
+const mapSvg = document.getElementById("map");
+let mapDots = [];
+
+function buildMap() {
+  const sec = document.getElementById("mapFig");
+  mapSvg.innerHTML = "";
+  mapDots = [];
+  if (!TX || !ERCOT?.counties || state.source !== "ercot") { sec.hidden = true; return; }
+  sec.hidden = false;
+  mapSvg.setAttribute("viewBox", `-4 -4 ${TX.w + 8} ${TX.h + 8}`);
+  const centre = {};
+  const base = el("g", {}, mapSvg);
+  TX.counties.forEach(c => { el("path", { d: c.d, class: "county" }, base); centre[c.n] = c.c; });
+
+  const mwOf = new Map(), techOf = new Map();
+  for (const g of fleet) { mwOf.set(g.unit, (mwOf.get(g.unit) || 0) + g.capacity); techOf.set(g.unit, g.tech); }
+  const units = ERCOT.resources.map((n, i) => ({ name: n, tech: techOf.get(n), county: ERCOT.counties[i], mw: mwOf.get(n) }));
+
+  // sunflower layout inside each county: biggest units nearest the centre
+  const byCounty = new Map();
+  for (const u of units) if (u.county && centre[u.county]) (byCounty.get(u.county) || byCounty.set(u.county, []).get(u.county)).push(u);
+  const placed = [];
+  for (const [county, list] of byCounty) {
+    const [cx, cy] = centre[county];
+    list.sort((a, b) => b.mw - a.mw).forEach((u, k) => {
+      const r = 2.1 * Math.sqrt(k), a = k * 2.39996;
+      placed.push({ ...u, x: cx + r * Math.cos(a), y: cy + r * Math.sin(a), rad: Math.max(1.3, Math.sqrt(u.mw) / 4.5) });
+    });
+  }
+  placed.sort((a, b) => b.rad - a.rad);   // small dots drawn last so they stay visible
+  const g = el("g", {}, mapSvg);
+  for (const u of placed) {
+    const c = el("circle", { cx: u.x.toFixed(1), cy: u.y.toFixed(1), r: u.rad.toFixed(2), class: "dot", fill: TECH[u.tech].color }, g);
+    el("title", {}, c).textContent = `${u.name} · ${TECH[u.tech].label} · ${u.county.toLowerCase().replace(/\b\w/g, ch => ch.toUpperCase())} County · ${num(u.mw)} MW offered`;
+    mapDots.push({ c, u });
+  }
+
+  const online = ERCOT.resources.length, located = ERCOT.counties.filter(Boolean).length;
+  document.getElementById("mapCap").textContent =
+    `Figure 3: Where the power comes from. Online ERCOT generators at ${ERCOT.interval}, by county and technology; ` +
+    `after Dispatch only the units that clear remain. Dot area is proportional to MW offered. ` +
+    `${online - located} of ${online} online units (mostly industrial plants) have no public county and are not shown.`;
+}
+
+// before dispatch: every online unit; after dispatch: only the units that clear
+function renderMap(s) {
+  for (const { c, u } of mapDots) c.classList.toggle("gone", !!s && !s.cleared.has(u.name));
+}
+
+// ---------------------------------------------------------------------------
+// Figure 2: supply curve of all bids, coloured by technology
+// ---------------------------------------------------------------------------
+const cv = document.getElementById("curve");
+const C = { w: 460, h: 330, l: 58, r: 24, t: 24, b: 44 };
+
+function renderCurve(s) {
+  cv.innerHTML = "";
+  const xMax = TOTAL * 1.08;
+  // price window: real offers run from the -$250 floor to several $1000s, so clip for readability
+  const pMin = merit[0]?.marginal_cost ?? 0, pMax = merit.at(-1)?.marginal_cost ?? 1;
+  let hi = Math.min(pMax, 250);
+  if (s) hi = Math.max(hi, s.price);
+  hi = Math.max(hi, 10) * 1.1;
+  const lo = pMin < 0 ? Math.max(pMin, -50) * 1.15 : 0;
+  const X = q => C.l + (q / xMax) * (C.w - C.l - C.r);
+  const Y = p => C.h - C.b - ((Math.min(hi, Math.max(lo, p)) - lo) / (hi - lo)) * (C.h - C.t - C.b);
+  const x0 = X(0), yb = Y(lo), yz = Y(0);
+
+  const defs = el("defs", {}, cv);
+  const mk = el("marker", { id: "arr", viewBox: "0 0 10 10", refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: "auto-start-reverse" }, defs);
+  el("path", { d: "M0 1 L9 5 L0 9", fill: "none", stroke: "var(--ink)", "stroke-width": 1.4 }, mk);
+  const hatch = el("pattern", { id: "hatch", width: 6, height: 6, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" }, defs);
+  el("line", { x1: 0, y1: 0, x2: 0, y2: 6, stroke: "var(--amber)", "stroke-width": 1.4 }, hatch);
+
+  // grey continuous outline (shows the risers), coloured flats per technology, and the cleared steps
+  let q = 0, outline = "";
+  const segs = Object.fromEntries(TECHS.map(t => [t.key, ""]));
+  const served = s ? s.served : 0;
+  const pts = [];
+  for (const g of merit) {
+    const y = Y(g.marginal_cost), xa = X(q), xb = X(q + g.capacity);
+    outline += (outline ? `V${y}` : `M${xa} ${y}`) + `H${xb}`;
+    segs[g.tech] += `M${xa} ${y}H${xb}`;
+    if (q < served - EPS) pts.push([xa, y], [X(Math.min(q + g.capacity, served)), y]);
+    q += g.capacity;
+  }
+
+  if (s && served > EPS) {
+    const py = Y(s.price), xe = X(served);
+    const fwd = pts.map(([x, y]) => `L${x} ${y}`).join("");
+    const back = pts.slice().reverse().map(([x, y]) => `L${x} ${y}`).join("");
+    el("path", { d: `M${x0} ${yz}${fwd}L${xe} ${yz}Z`, fill: "var(--amber-soft)" }, cv);   // total cost
+    el("path", { d: `M${x0} ${py}H${xe}${back}Z`, fill: "url(#hatch)" }, cv);             // producer surplus
+  }
+
+  // axes + ticks
+  if (lo < 0) el("line", { x1: x0, x2: C.w - C.r, y1: yz, y2: yz, stroke: "#d0d0d0", "stroke-width": 1 }, cv);
+  el("path", { d: `M${x0} ${yb} H${C.w - 6}`, class: "axis", "marker-end": "url(#arr)" }, cv);
+  el("path", { d: `M${x0} ${yb} V${C.t - 14}`, class: "axis", "marker-end": "url(#arr)" }, cv);
+  math(cv, C.w - 4, yb - 8, [["q", "i"], [" (GW)"]], 15, { "text-anchor": "end" });
+  math(cv, x0 - 8, C.t - 18, [["p", "i"], [" ($/MWh)"]], 15);
+  const xs_ = niceStep(xMax / 1000) * 1000;
+  for (let v = 0; v <= xMax; v += xs_) {
+    el("line", { x1: X(v), x2: X(v), y1: yb, y2: yb + 5, class: "axis" }, cv);
+    math(cv, X(v), yb + 18, [[`${+(v / 1000).toFixed(1)}`]], 13, { "text-anchor": "middle", class: "tick" });
+  }
+  const ys_ = niceStep(hi - lo);
+  for (let v = Math.ceil(lo / ys_) * ys_; v <= hi; v += ys_) {
+    el("line", { x1: x0 - 5, x2: x0, y1: Y(v), y2: Y(v), class: "axis" }, cv);
+    math(cv, x0 - 8, Y(v) + 4, [[`${v}`]], 13, { "text-anchor": "end", class: "tick" });
+  }
+
+  el("path", { d: outline, class: "riser" }, cv);
+  TECHS.forEach(t => el("path", { d: segs[t.key], stroke: t.color, "stroke-width": 3, fill: "none" }, cv));
+
+  // rug on the q-axis: a thin strip showing which technology supplies each slice of the stack
+  // (consecutive bids of one technology merged; slices beyond the cleared quantity faded)
+  let rq = 0, run = null;
+  const runs = [];
+  for (const g of merit) {
+    if (run && run.tech === g.tech) run.q1 += g.capacity;
+    else { run = { tech: g.tech, q0: rq, q1: rq + g.capacity }; runs.push(run); }
+    rq += g.capacity;
+  }
+  for (const r of runs) {
+    const cut = s ? Math.min(Math.max(served, r.q0), r.q1) : r.q1;
+    const fill = TECH[r.tech].color;
+    if (cut > r.q0) el("rect", { x: X(r.q0), y: yb + 1, width: X(cut) - X(r.q0), height: 3, fill, opacity: 0.7 }, cv);
+    if (r.q1 > cut) el("rect", { x: X(cut), y: yb + 1, width: X(r.q1) - X(cut), height: 3, fill, opacity: 0.2 }, cv);
+  }
+
+  const dx = X(demand());
+  el("line", { x1: dx, x2: dx, y1: yb, y2: C.t, class: "guide" }, cv);
+  math(cv, dx + 5, C.t + 8, [["d", "i"]], 17);
+  if (s) {
+    const py = Y(s.price);
+    el("line", { x1: x0, x2: dx, y1: py, y2: py, class: "guide" }, cv);
+    math(cv, x0 + 6, py - 6, [["π", "i"], ["⋆", "sup"]], 17);
+    if (!s.shortage) el("circle", { cx: dx, cy: py, r: 4.5, fill: "var(--ink)" }, cv);
+  }
+
+  const clipped = pMin < lo || pMax > hi;
+  document.getElementById("clipNote").textContent = clipped
+    ? ` Bids range from ${usd(pMin)} to ${usd(pMax)} $/MWh; the axis is cut at ${Math.round(lo)} and ${Math.round(hi)}.` : "";
+  document.getElementById("legend").innerHTML =
+    TECHS.map(t => `<span class="sw" style="background:${t.color}"></span>${t.label}`).join("");
+}
+
+// ---------------------------------------------------------------------------
+// Table 1 and the solution line (2)
+// ---------------------------------------------------------------------------
+function renderTable(s) {
+  const tbody = document.getElementById("rows");
+  tbody.innerHTML = TECHS.map(t => {
+    const T = techTotals[t.key], P = s?.perTech[t.key];
+    const idle = s && P.g <= EPS;
+    const range = T.n ? `${usd(T.pmin)} – ${usd(T.pmax)}` : "–";
+    return `<tr class="${idle ? "idle" : ""}"><td><span class="sw" style="background:${t.color};margin-left:0"></span>${t.label}</td>
+      <td>${num(T.n)}</td><td>${mw(T.q)}</td><td>${range}</td>
+      <td>${s ? num(P.k) : "–"}</td><td class="${s && !idle ? "g" : ""}">${s ? mw(P.g) : "–"}</td>
+      <td><span class="bar"><i style="width:${s && T.q ? 100 * P.g / T.q : 0}%"></i></span></td></tr>`;
+  }).join("");
+  document.getElementById("total").innerHTML =
+    `<tr><td>Total</td><td>${num(UNITS)}</td><td>${mw(TOTAL)}</td><td></td>
+      <td>${s ? num(s.k) : "–"}</td><td class="${s ? "g" : ""}">${s ? mw(s.served) : "–"}</td>
+      <td><span class="bar"><i style="width:${s ? 100 * s.served / TOTAL : 0}%"></i></span></td></tr>`;
+}
+
+const texEsc = str => String(str).replace(/[\\{}]/g, "").replace(/([_&#%$])/g, "\\$1");
+
+function renderSolution(s) {
+  const box = document.getElementById("solution");
+  box.innerHTML = "";
+  box.classList.toggle("muted", !s);
+  if (!s) { box.textContent = "Press Dispatch to solve (1)."; return; }
+  let src = `\\sum_i g_i^\\star = ${(s.served / 1000).toFixed(2)}\\ \\text{GW}, \\qquad `;
+  src += s.shortage
+    ? `\\pi^\\star = \\bar{\\pi} = ${usd(s.price)}\\ \\$/\\text{MWh}\\ \\text{(cap)}`
+    : `\\pi^\\star = ${usd(s.price)}\\ \\$/\\text{MWh}\\ \\text{(set by ${texEsc(s.marginal.unit)}, ${texEsc(TECH[s.marginal.tech].label)})}`;
+  src += `, \\qquad ${num(s.k)} \\text{ of } ${num(UNITS)} \\text{ units cleared}`;
+  const span = document.createElement("span");
+  tex(span, src, true);
+  const no = document.createElement("span");
+  no.className = "no"; no.textContent = "(2)";
+  box.append(span, no);
+}
+
+// ---------------------------------------------------------------------------
+// Wiring
+// ---------------------------------------------------------------------------
+const nSlider = document.getElementById("nGen");
+const dSlider = document.getElementById("demand");
+const nOut = document.getElementById("nVal");
+const dOut = document.getElementById("dVal");
+const go = document.getElementById("go");
+const fleetInfo = document.getElementById("fleetInfo");
+const capInput = document.getElementById("cap");
+capInput.addEventListener("change", () => {
+  const v = Number(capInput.value);
+  const ok = capInput.value.trim() !== "" && Number.isFinite(v) && v > 0;
+  capInput.classList.toggle("bad", !ok);
+  if (ok) { state.cap = v; render(); } else capInput.value = state.cap;
+});
+
+function render() {
+  const s = solve();
+  const ercot = state.source === "ercot";
+  nOut.textContent = ercot ? `${num(UNITS)} units, ${num(fleet.length)} bids` : `${num(state.N)} units`;
+  dOut.textContent = `${mw(demand())} (${(state.frac * 100).toFixed(1)}% of capacity)` +
+    (ercot ? `; actual ${mw(ERCOT.demand_mw)}` : "");
+  fleetInfo.textContent = ercot ? `${ERCOT.interval} (Texas)` : (ERCOT ? "" : "Run python ercot_data.py to add ERCOT bids.");
+  const maxBid = merit.at(-1)?.marginal_cost ?? 0;
+  document.getElementById("capNote").textContent = maxBid > state.cap
+    ? `Below the highest bid (${usd(maxBid)} $/MWh).` : "Price if demand exceeds all offers.";
+  nSlider.disabled = ercot;
+  document.getElementById("reseed").disabled = ercot;
+  go.textContent = state.live ? "Reset" : "Dispatch";
+  const dp = document.getElementById("dockPrice");
+  if (s) tex(dp, `\\pi^\\star = ${usd(s.price)}\\ \\$/\\text{MWh}`); else dp.textContent = "";
+  renderDiagram(s);
+  renderMap(s);
+  renderCurve(s);
+  renderTable(s);
+  renderSolution(s);
+}
+function rebuild() { regenerate(); buildDiagram(); buildMap(); render(); }
+
+const ercotRadio = document.querySelector('input[name=fleet][value=ercot]');
+ercotRadio.disabled = !ERCOT;
+document.querySelectorAll("input[name=fleet]").forEach(r => r.addEventListener("change", e => {
+  state.source = e.target.value;
+  regenerate();
+  // start ERCOT at the demand ERCOT actually served in that interval
+  state.frac = state.source === "ercot" ? ERCOT.demand_mw / TOTAL : 0.65;
+  dSlider.value = state.frac * 100;
+  state.cap = CAPS[state.source];
+  capInput.value = state.cap;
+  capInput.classList.remove("bad");
+  buildDiagram();
+  buildMap();
+  render();
+}));
+
+nSlider.addEventListener("input", e => { state.N = +e.target.value; rebuild(); });
+dSlider.addEventListener("input", e => { state.frac = +e.target.value / 100; render(); });
+go.addEventListener("click", () => { state.live = !state.live; render(); });
+document.getElementById("reseed").addEventListener("click", () => { state.seed = (Math.random() * 2 ** 31) | 0; rebuild(); });
+
+document.querySelectorAll("[data-tex]").forEach(n => tex(n, n.dataset.tex));
+document.querySelectorAll("[data-tex-display]").forEach(n => tex(n, n.dataset.texDisplay, true));
+document.getElementById("today").textContent =
+  new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+
+rebuild();
+</script>
+</body>
+</html>
