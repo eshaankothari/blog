@@ -1,12 +1,17 @@
 ---
-title: Energy Markets
-dek: "A textbook in progress on how electricity markets clear, one interactive chapter at a time"
+title: Simulating Electricity Market Dispatch
+dek: "Simulations and textbook in progress on how electricity markets clear"
 byline: Eshaan Kothari
 date: 2026-11-13
 layout: story
 ---
 
-Electricity is a market that has to clear every few minutes — supply has to match demand on the grid at every moment. These chapters build that market up from the simplest version: a few generators on one wire, then hundreds, then every generator in Texas.
+Electricity Market Simulations and Textbook
+
+Electricity is traded in a market, but unlike any other commodity, we cannot see electrons. Capacity, transmission, inter-time, inter-space, and physics all present constraints and challenges that determine the market-clearing price for electricity that retailers purchase on a whole-sale market and generators sell at.
+
+Each chapter builds on itself adding in another constraint that models what real-world electricity markets look like. This textbook also scales simulations to real-world magnitudes, including backtesting against electricity markets, like ERCOT in Texas.
+
 
 ## Chapters
 
